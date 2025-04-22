@@ -1,0 +1,292 @@
+#!/bin/zsh
+
+# fontutil
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+
+set -euo pipefail
+
+local -r commandName="$0"
+local -r -A subcommands=(
+  [--help]="View help message."
+  [family]="View the family name(s) of the font(s)."
+)
+local -r -a supportedContentTypes=(
+  "public.opentype-font"
+  "public.truetype-ttf-font"
+)
+
+
+##### Miscellaneous Functions #####
+
+function printError() {
+  local -r message="$1"
+  printf '\033[31merror:\033[m %s\n' "$message" 1>&2
+}
+
+function printWarning() {
+  local -r message="$1"
+  printf '\033[33mwarning:\033[m %s\n' "$message" 1>&2
+}
+
+function printInfo() {
+  local -r message="$1"
+  printf '\033[2minfo:\033[m %s\n' "$message" 1>&2
+}
+
+function printHelp() {
+  {
+    echo "Usage: $commandName <subcommand> [options...]"
+    echo
+    echo "Subcommands:"
+    
+    local -r -a subcommandNames=("${(@k)subcommands}")
+    local subcommandName
+    for subcommandName in ${(o)subcommandNames}; do
+      if [[ "$subcommandName" == "--help" ]]; then
+        continue
+      fi
+      printf "%12s: %s\n" "$subcommandName" "${subcommands[$subcommandName]}"
+    done
+  } 1>&2
+}
+
+function assertionFailed() {
+  local -r message="$1"
+  local -r lineNumber="${2:-0}"
+  echo "❗ Assertion failed (bug): line ${lineNumber}: $message" 1>&2
+  exit 1
+}
+
+function isTrue() {
+  local -r value="$1"
+  if [[ "${(L)value}" == "true" ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+local isVerbose="false"
+function verbosePrint() {
+  local -r message="$1"
+  if isTrue $isVerbose; then
+    printInfo "$message"
+  fi
+}
+
+local -A __cache_isSupportedFile=()
+function isSupportedFile() {
+  local -r filePath="$1"
+
+  function __isSupportedFile() {
+    if [[ ! -f "$filePath" ]]; then
+      return 1
+    fi
+
+    local -r fileContentType=$(mdls -raw -nullMarker "" -name kMDItemContentType "$filePath")
+    if (( $supportedContentTypes[(Ie)$fileContentType] )); then
+      return 0
+    fi
+    return 1
+  }
+
+  if [[ -n "${__cache_isSupportedFile[(i)$filePath]}" ]]; then
+    if isTrue "${__cache_isSupportedFile[$filePath]}"; then
+      return 0
+    else
+      return 1
+    fi
+  fi
+
+  if __isSupportedFile; then
+    __cache_isSupportedFile[$filePath]="true"
+    return 0
+  else
+    __cache_isSupportedFile[$filePath]="false"
+    return 1
+  fi
+}
+
+function allFiles() {
+  local -A parsedArguments=()
+  zparseopts -D -E -A parsedArguments -- -validate
+  local -r validate=$(
+    if [[ -n "${parsedArguments[(i)--validate]}" ]]; then
+      echo "true"
+    else
+      echo "false"
+    fi
+  )
+
+  local -r -a givenFilePaths=($@)
+  local filePath
+  for filePath in $filePaths; do
+    if [[ -f "$filePath" ]]; then
+      if isTrue $validate && ! isSupportedFile "$filePath"; then
+        printWarning "Unsupported file at ${filePath}."
+        continue
+      fi
+      echo $filePath
+    elif [[ -d "$filePath" ]]; then
+      local -r subFilePaths=($filePath/**/*(-.))
+      local subFilePath
+      for subFilePath in $subFilePaths; do
+        local fontPathCandidate=$(
+          if [[ -f "$subFilePath" ]]; then
+            echo $subFilePath
+          elif [[ -L "$subFilePath" ]]; then
+            readlink -f "$subFilePath" 
+          fi
+        )
+        if isTrue $validate && ! isSupportedFile "$fontPathCandidate"; then
+          printWarning "Unsupported file at ${fontPathCandidate}."
+          continue
+        fi
+        echo $fontPathCandidate
+      done
+    else
+      printWarning "File not found at ${filePath}."
+    fi
+  done
+}
+
+function decodeMDString() {
+  local -r rawString="${1//\\U/\\u}"
+  eval "echo $rawString"
+}
+
+function decodedMDArrayForNameAtPath() {
+  [[ $#@ -eq 2 ]] || assertionFailed "decodedMDArrayForNameAtPath() requires exactly two arguments." ${(%):-%I}
+
+  local -r mdName="$1"
+  local -r filePath="$2"
+  local -r mdArrayLines=$(mdls -raw -nullMarker "" -name "$mdName" "$filePath")
+  local mdArrayLine
+  for mdArrayLine in ${(f)mdArrayLines}; do
+    mdArrayLine="${${mdArrayLine##[[:space]]##}%%[[:space]]##}"
+    mdArrayLine="${${${mdArrayLine##'('}%%,}%%')'}"
+    [[ "$mdArrayLine" != "null" ]] || assertionFailed "'null' is not expected here." ${(%):-%I}
+    if [[ -z "$mdArrayLine" ]]; then
+      continue
+    fi
+    printf '%s\n' "$(decodeMDString "$mdArrayLine")"
+  done
+}
+
+local -A __cache_printFontFamily=()
+function printFontFamily() {
+  local -A parsedArguments=()
+  zparseopts -D -E -A parsedArguments -- -with-filename
+  local -r withFilename=$(
+    if [[ -n "${parsedArguments[(i)--with-filename]}" ]]; then
+      echo "true"
+    else
+      echo "false"
+    fi
+  )
+
+  [[ $#@ -eq 1 ]] || assertionFailed "printFontFamily() requires exactly one file path." ${(%):-%I}
+  
+  local -r filePath="$1"
+  [[ -f "$filePath" ]] && isSupportedFile "$filePath" \
+    || assertionFailed "printFontFamily() requires a valid file path." ${(%):-%I}
+
+  function __getFontFamilyString() {
+    if [[ -n "${__cache_printFontFamily[(i)$filePath]}" ]]; then
+      echo "${__cache_printFontFamily[$filePath]}"
+      return 0
+    fi
+
+    local -r parsedFamilyNames=$(decodedMDArrayForNameAtPath com_apple_ats_name_family "$filePath")
+    __cache_printFontFamily[$filePath]="$parsedFamilyNames"
+    echo "$parsedFamilyNames"
+  }
+
+  if isTrue $withFilename; then
+    echo "${filePath}:"
+  fi
+  local -r fontFamilyString=$(__getFontFamilyString)
+  local fontFamilyLine
+  for fontFamilyLine in ${(f)fontFamilyString}; do
+    if isTrue $withFilename; then
+      printf '  %s\n' "$fontFamilyLine"
+    else
+      printf '%s\n' "$fontFamilyLine"
+    fi
+  done
+}
+
+##### SUBCOMMANDS #####
+
+function fontutil---help() {
+  printHelp
+  return 0
+}
+
+function fontutil-family() {
+  local -A parsedArguments=()
+  zparseopts -D -E -A parsedArguments -- -help
+  local -r -a filePaths=($@)
+
+  function __printFamilyHelp() {
+    {
+      echo "${subcommands[family]}"
+      echo "  Usage: $commandName $subcommandName FILE [FILE...]"
+    } 1>&2
+  }
+
+  if [[ -n "${parsedArguments[(i)--help]}" ]]; then
+    __printFamilyHelp
+    return 0
+  fi
+
+  if [[ $#filePaths -lt 1 ]]; then
+    printError "No file specified."
+    __printFamilyHelp
+    return 1
+  fi
+
+  local -r expandedAllFilePathsString=$(allFiles --validate $filePaths)
+  local -r -a expandedAllFilePaths=(${(f)expandedAllFilePathsString})
+  local fontFilePath
+  for fontFilePath in $expandedAllFilePaths; do
+    if [[ $#expandedAllFilePaths -gt 1 ]]; then
+      printFontFamily --with-filename "$fontFilePath"
+      printf '\n'
+    else 
+      printFontFamily "$fontFilePath"
+    fi
+  done
+}
+
+##### MAIN #####
+
+function _main_() {
+  if [[ $#@ -lt 1 ]]; then
+    printError "No subcommand specified."
+    printHelp
+    exit 1
+  fi
+
+  local -r subcommandName="$1"
+  shift
+
+  local -A commonParsedArguments=()
+  zparseopts -D -E -A commonParsedArguments -- v -verbose=v
+  if [[ -n "${commonParsedArguments[(i)-v]}" ]]; then
+    isVerbose="true"
+    verbosePrint "Verbose mode enabled."
+  fi
+
+  local -r -a subcommandArguments=($@)
+  if [[ -n "$subcommands[(I)$subcommandName]" ]]; then
+    "fontutil-$subcommandName" $subcommandArguments
+  else
+    printError "Unknown subcommand: $subcommandName"
+    printHelp
+    exit 1
+  fi
+}
+_main_ $@
