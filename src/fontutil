@@ -175,8 +175,8 @@ function decodedMDArrayForNameAtPath() {
   done
 }
 
-local -A __cache_printFontFamily=()
-function printFontFamily() {
+local -A __cache_printItemsForAttributeAtPath=()
+function printItemsForAttributeAtPath() {
   local -A parsedArguments=()
   zparseopts -D -E -A parsedArguments -- -with-filename
   local -r withFilename=$(
@@ -187,33 +187,35 @@ function printFontFamily() {
     fi
   )
 
-  [[ $#@ -eq 1 ]] || assertionFailed "printFontFamily() requires exactly one file path." ${(%):-%I}
-  
-  local -r filePath="$1"
-  [[ -f "$filePath" ]] && isSupportedFile "$filePath" \
-    || assertionFailed "printFontFamily() requires a valid file path." ${(%):-%I}
+  [[ $#@ -eq 2 ]] || assertionFailed "printItemsForAttributeAtPath() requires exactly one attribute name and one file path." ${(%):-%I}
 
-  function __getFontFamilyString() {
-    if [[ -n "${__cache_printFontFamily[(i)$filePath]}" ]]; then
-      echo "${__cache_printFontFamily[$filePath]}"
+  local -r attributeName="$1"
+  local -r filePath="$2"
+  [[ -f "$filePath" ]] && isSupportedFile "$filePath" \
+    || assertionFailed "printItemsForAttributeAtPath() requires a valid file path." ${(%):-%I}
+
+  function __getFontAttributeItemsString() {
+    local -r cacheKey="${filePath}:${attributeName}"
+    if [[ -n "${__cache_printItemsForAttributeAtPath[(i)$cacheKey]}" ]]; then
+      echo "${__cache_printItemsForAttributeAtPath[$cacheKey]}"
       return 0
     fi
 
-    local -r parsedFamilyNames=$(decodedMDArrayForNameAtPath com_apple_ats_name_family "$filePath")
-    __cache_printFontFamily[$filePath]="$parsedFamilyNames"
-    echo "$parsedFamilyNames"
+    local -r parsedItems=$(decodedMDArrayForNameAtPath "$attributeName" "$filePath")
+    __cache_printItemsForAttributeAtPath[$cacheKey]="$parsedItems"
+    echo "$parsedItems"
   }
 
   if isTrue $withFilename; then
     echo "${filePath}:"
   fi
-  local -r fontFamilyString=$(__getFontFamilyString)
-  local fontFamilyLine
-  for fontFamilyLine in ${(f)fontFamilyString}; do
+  local -r fontAttributeString=$(__getFontAttributeItemsString)
+  local fontAttributeItem  
+  for fontAttributeItem in ${(f)fontAttributeString}; do
     if isTrue $withFilename; then
-      printf '  %s\n' "$fontFamilyLine"
+      printf '  %s\n' "$fontAttributeItem"
     else
-      printf '%s\n' "$fontFamilyLine"
+      printf '%s\n' "$fontAttributeItem"
     fi
   done
 }
@@ -225,15 +227,16 @@ function fontutil---help() {
   return 0
 }
 
-function fontutil-family() {
+function __fontutil-attributes-for-files() {
   local -A parsedArguments=()
   zparseopts -D -E -A parsedArguments -- -help
+  local -r attributeName="$1"; shift
   local -r -a filePaths=($@)
 
   function __printFamilyHelp() {
     {
-      echo "${subcommands[family]}"
-      echo "  Usage: $commandName $subcommandName FILE [FILE...]"
+      echo "${subcommands[$subcommandName]}"
+      echo "  Usage: $commandName $subcommandName FILE..."
     } 1>&2
   }
 
@@ -253,12 +256,16 @@ function fontutil-family() {
   local fontFilePath
   for fontFilePath in $expandedAllFilePaths; do
     if [[ $#expandedAllFilePaths -gt 1 ]]; then
-      printFontFamily --with-filename "$fontFilePath"
+      printItemsForAttributeAtPath "$attributeName" --with-filename "$fontFilePath"
       printf '\n'
     else 
-      printFontFamily "$fontFilePath"
+      printItemsForAttributeAtPath "$attributeName" "$fontFilePath"
     fi
   done
+}
+
+function fontutil-family() {
+  __fontutil-attributes-for-files com_apple_ats_name_family $@
 }
 
 ##### MAIN #####
