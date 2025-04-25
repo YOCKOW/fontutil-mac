@@ -130,7 +130,7 @@ function allFiles() {
       fi
       echo $filePath
     elif [[ -d "$filePath" ]]; then
-      local -r subFilePaths=($filePath/**/*(-.))
+      local subFilePaths=(${filePath%%/}/**/*(-.))
       local subFilePath
       for subFilePath in $subFilePaths; do
         local fontPathCandidate=$(

@@ -6,6 +6,7 @@ It's a command line tool to inspect font files, or to convert font files into a 
 # Requirements
 
 - macOS
+  * Spotlight must be enabled for the directory where the font files are.
 - zsh
 
 
