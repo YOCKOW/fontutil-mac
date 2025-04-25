@@ -1,0 +1,32 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/init
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+local -r fontutilTestsDir=$(cd "$(dirname "$0")" && pwd)
+local -r testsDir=$(dirname "$fontutilTestsDir")
+local -r repoDir=$(dirname "$testsDir")
+local -r mplusFontsDir="$repoDir/tests/assets/MPLUS_FONTS/fonts"
+
+SSTExport FONTUTIL_COMMAND        "$repoDir/src/fontutil"
+SSTExport FONTUTIL_TEST_FONTS_DIR "$mplusFontsDir"
+
+set -x
+cd "$repoDir" && git submodule update --init --filter=blob:none
+mdimport -r /System/Library/Spotlight/Font.mdimporter "$mplusFontsDir"
+mdimport -i "$mplusFontsDir"
+{ set +x; } 2>/dev/null
+
+if [[ -v GITHUB_ACTIONS ]]; then
+  set -x
+  mdimport -t -d3 "$mplusFontsDir"
+  mdimport -t -d3 "$mplusFontsDir"/{o,t}tf
+  mdimport -t -d3 "$mplusFontsDir"/**/*.{o,t}tf
+  { set +x; } 2>/dev/null  
+fi

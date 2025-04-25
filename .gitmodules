@@ -1,0 +1,3 @@
+[submodule "tests/assets/MPLUS_FONTS"]
+	path = tests/assets/MPLUS_FONTS
+	url = https://github.com/coz-m/MPLUS_FONTS.git
