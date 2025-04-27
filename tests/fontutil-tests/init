@@ -28,5 +28,6 @@ if [[ -v GITHUB_ACTIONS ]]; then
   mdimport -t -d3 "$mplusFontsDir"
   mdimport -t -d3 "$mplusFontsDir"/{o,t}tf
   mdimport -t -d3 "$mplusFontsDir"/**/*.{o,t}tf
-  { set +x; } 2>/dev/null  
+  sleep 3  
+  { set +x; } 2>/dev/null
 fi
