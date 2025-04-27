@@ -1,0 +1,27 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-full-name
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+local -r -A fontList=(
+  [otf/MplusCodeLatin60-SemiBold.otf]="M PLUS Code Latin 60 SemiBold"
+  [ttf/MplusCodeLatin60-Thin.ttf]="M PLUS Code Latin 60 Thin"
+)
+local fontFile
+for fontFile in ${(k)fontList}; do
+  local expectedFondName="${fontList[$fontFile]}"
+  local fontFilePath="$FONTUTIL_TEST_FONTS_DIR/$fontFile"
+  if [[ ! -f "$fontFilePath" ]]; then
+    SSTFail "Font file not found: $fontFilePath" -l ${(%):-%I}
+    continue
+  fi
+
+  local fondName=$("$FONTUTIL_COMMAND" full-name "$fontFilePath")
+  SSTAssertStringEqual "$fondName" "$expectedFondName" -l ${(%):-%I}
+done

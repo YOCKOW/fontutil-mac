@@ -13,6 +13,7 @@ local -r -A subcommands=(
   [family]="Alias of 'family-name'"
   [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
+  [full-name]="View the full name of the font."
 )
 local -r -a supportedContentTypes=(
   "public.opentype-font"
@@ -276,6 +277,10 @@ function fontutil-family-name() {
 
 function fontutil-fond-name() {
   __fontutil-attributes-for-files com_apple_ats_name_fond $@
+}
+
+function fontutil-full-name() {
+  __fontutil-attributes-for-files com_apple_ats_name_full $@
 }
 
 ##### MAIN #####
