@@ -14,6 +14,7 @@ local -r -A subcommands=(
   [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
   [full-name]="View the full name of the font."
+  [postscript-name]="View the PostScript name of the font."
 )
 local -r -a supportedContentTypes=(
   "public.opentype-font"
@@ -281,6 +282,10 @@ function fontutil-fond-name() {
 
 function fontutil-full-name() {
   __fontutil-attributes-for-files com_apple_ats_name_full $@
+}
+
+function fontutil-postscript-name() {
+  __fontutil-attributes-for-files com_apple_ats_name_postscript $@
 }
 
 ##### MAIN #####

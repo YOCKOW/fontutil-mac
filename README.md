@@ -33,6 +33,12 @@ fontutil fond-name MyFontFile.ttf
 fontutil full-name MyFontFile.ttf
 ```
 
+## View PostScript name of a font
+
+```console
+fontutil postscript-name MyFontFile.ttf
+```
+
 
 # License
 
