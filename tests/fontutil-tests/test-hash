@@ -1,0 +1,12 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-hash
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+SSTAssertStringEqual "6438affa229e0488da3f171376604a7633bb1defb6b988e68b7cf9cb90f2f0a5" $("$FONTUTIL_COMMAND" hash "$FONTUTIL_TEST_FONTS_DIR")
