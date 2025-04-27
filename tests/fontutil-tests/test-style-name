@@ -1,0 +1,27 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-style-name
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+local -r -A fontList=(
+  [otf/Mplus2-Regular.otf]="Regular"
+  [ttf/Mplus1Code-Bold.ttf]="Bold"
+)
+local fontFile
+for fontFile in ${(k)fontList}; do
+  local expectedFondName="${fontList[$fontFile]}"
+  local fontFilePath="$FONTUTIL_TEST_FONTS_DIR/$fontFile"
+  if [[ ! -f "$fontFilePath" ]]; then
+    SSTFail "Font file not found: $fontFilePath" -l ${(%):-%I}
+    continue
+  fi
+
+  local fondName=$("$FONTUTIL_COMMAND" style-name "$fontFilePath")
+  SSTAssertStringEqual "$fondName" "$expectedFondName" -l ${(%):-%I}
+done
