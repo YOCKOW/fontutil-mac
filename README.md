@@ -14,6 +14,17 @@ It's a command line tool to inspect font files, or to convert font files into a 
 
 First, copy shell scripts in `src` directory to the directory which is included in your `PATH` environment variable.
 
+## View author(s) of a font
+
+```console
+fontutil authors MyFontFile.ttf
+```
+
+## View copyright of a font
+
+```console
+fontutil copyright MyFontFile.ttf
+```
 
 ## View family name(s) of a font
 
@@ -39,10 +50,22 @@ fontutil full-name MyFontFile.ttf
 fontutil postscript-name MyFontFile.ttf
 ```
 
-## View PostScript name of a font
+## View publisher(s) of a font
+
+```console
+fontutil publishers MyFontFile.ttf
+```
+
+## View style name of a font
 
 ```console
 fontutil style-name MyFontFile.ttf
+```
+
+## View version of a font
+
+```console
+fontutil version MyFontFile.ttf
 ```
 
 
