@@ -63,7 +63,7 @@ function printHelp() {
       if [[ "$subcommandName" == "--help" ]]; then
         continue
       fi
-      printf "%12s: %s\n" "$subcommandName" "${subcommands[$subcommandName]}"
+      printf "%16s: %s\n" "$subcommandName" "${subcommands[$subcommandName]}"
     done
     echo 
 
@@ -71,7 +71,7 @@ function printHelp() {
     local -r -a subcommandAliasNames=(${(@k)subcommandAliases})
     local aliasName
     for aliasName in ${(o)subcommandAliasNames}; do
-      printf "%12s: %s\n" "$aliasName" "Alias of '${subcommandAliases[$aliasName]}'"
+      printf "%16s: %s\n" "$aliasName" "Alias of '${subcommandAliases[$aliasName]}'"
     done
   } 1>&2
 }
