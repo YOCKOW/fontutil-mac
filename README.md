@@ -15,10 +15,22 @@ It's a command line tool to inspect font files, or to convert font files into a 
 First, copy shell scripts in `src` directory to the directory which is included in your `PATH` environment variable.
 
 
-## View family name(s) of a font 
+## View family name(s) of a font
 
 ```console
-fontutil family MyFontFile.ttf
+fontutil family-name MyFontFile.ttf
+```
+
+## View fond name of a font
+
+```console
+fontutil fond-name MyFontFile.ttf
+```
+
+## View full name of a font
+
+```console
+fontutil full-name MyFontFile.ttf
 ```
 
 
