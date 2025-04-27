@@ -17,6 +17,7 @@ local -r -A subcommands=(
   [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
   [full-name]="View the full name of the font."
+  [hash]="View the file hash for the font. (Internal Use)"
   [postscript-name]="View the PostScript name of the font."
   [publishers]="View the publishers of the font."
   [style-name]="View the style name of the font."
@@ -324,6 +325,42 @@ function fontutil-fond-name() {
 
 function fontutil-full-name() {
   __fontutil-attributes-for-files com_apple_ats_name_full $@
+}
+
+function fontutil-hash() {
+  function __hashOfFile() {
+    [[ $#@ -eq 1 ]] || assertionFailed "__hashOfFile() requires exactly one file path." ${(%):-%I}
+    local -r filePath="$1"
+    [[ -f "$filePath" ]] || assertionFailed "File not found at ${filePath}." ${(%):-%I}
+    local -r hashed=${(L)$(shasum -a 256 -b "$filePath")[(w)1]}
+    [[ "$hashed" =~ ^[0-9a-f]{64}$ ]] || assertionFailed "Unexpected hash value." ${(%):-%I}
+    echo $hashed
+  }
+
+  local -r -a filePaths=($@)
+  if [[ $#filePaths -lt 1 ]]; then
+    printError "No file specified."
+    return 1
+  fi
+
+  local -r -a fontFiles=(${(@f)$(allFiles --validate $filePaths)})
+  if [[ $#fontFiles -lt 1 ]]; then
+    printError "No supported files."
+    return 1
+  elif [[ $#fontFiles -eq 1 ]]; then
+    __hashOfFile $fontFiles
+  else
+    local -a hashValues=()
+    local fontFile
+    for fontFile in $fontFiles; do
+      hashValues=($hashValues $(__hashOfFile "$fontFile"))
+    done
+    hashValues=(${(o)hashValues})
+    
+    local -r tmpFile="$(mktemp)"
+    echo ${(j::)hashValues} | xxd -r -p >"$tmpFile"
+    __hashOfFile "$tmpFile"
+  fi
 }
 
 function fontutil-postscript-name() {
