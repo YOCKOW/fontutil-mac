@@ -1,0 +1,27 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-version
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+local -r -A fontList=(
+  [otf/Mplus1-Medium.otf]="Version 1.007"
+  [ttf/Mplus1-Regular.ttf]="Version 1.007"
+)
+local fontFile
+for fontFile in ${(k)fontList}; do
+  local expectedFamilyName="${fontList[$fontFile]}"
+  local fontFilePath="$FONTUTIL_TEST_FONTS_DIR/$fontFile"
+  if [[ ! -f "$fontFilePath" ]]; then
+    SSTFail "Font file not found: $fontFilePath" -l ${(%):-%I}
+    continue
+  fi
+
+  local familyName=$("$FONTUTIL_COMMAND" version "$fontFilePath")
+  SSTAssertStringEqual "$familyName" "$expectedFamilyName" -l ${(%):-%I}
+done

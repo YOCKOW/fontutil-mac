@@ -6,16 +6,26 @@
 #     See "LICENSE.txt" for more information.
 
 set -euo pipefail
+set -o extendedglob
+
 
 local -r commandName="$0"
 local -r -A subcommands=(
   [--help]="View help message."
-  [family]="Alias of 'family-name'"
+  [authors]="View the authors of the font."
+  [copyright]="View the copyright information of the font."
   [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
   [full-name]="View the full name of the font."
   [postscript-name]="View the PostScript name of the font."
+  [publishers]="View the publishers of the font."
   [style-name]="View the style name of the font."
+  [version]="View the version of the font."
+)
+local -r -A subcommandAliases=(
+  [author]=authors
+  [family]=family-name
+  [publisher]=publishers
 )
 local -r -a supportedContentTypes=(
   "public.opentype-font"
@@ -53,6 +63,14 @@ function printHelp() {
         continue
       fi
       printf "%12s: %s\n" "$subcommandName" "${subcommands[$subcommandName]}"
+    done
+    echo 
+
+    echo "Subcommand Aliases:"
+    local -r -a subcommandAliasNames=(${(@k)subcommandAliases})
+    local aliasName
+    for aliasName in ${(o)subcommandAliasNames}; do
+      printf "%12s: %s\n" "$aliasName" "Alias of '${subcommandAliases[$aliasName]}'"
     done
   } 1>&2
 }
@@ -158,7 +176,12 @@ function allFiles() {
 }
 
 function decodeMDString() {
-  local -r rawString="${1//\\U/\\u}"
+  local rawString="${1-}"
+  if [[ "$rawString" =~ '^".+"$' ]]; then
+    rawString="${rawString//\\U/\\u}"
+  else
+    rawString="${(q)rawString}"
+  fi
   eval "echo $rawString"
 }
 
@@ -167,14 +190,24 @@ function decodedMDArrayForNameAtPath() {
 
   local -r mdName="$1"
   local -r filePath="$2"
-  local -r mdArrayLines=$(mdls -raw -nullMarker "" -name "$mdName" "$filePath")
+  local -r mdArrayLinesString=$(mdls -raw -nullMarker "" -name "$mdName" "$filePath")
+  local -r -a mdArrayLines=(${(f)mdArrayLinesString})
+  local -r numberOfMDArrayLines=$(( $#mdArrayLines + 0 ))
   local mdArrayLine
-  for mdArrayLine in ${(f)mdArrayLines}; do
-    mdArrayLine="${${mdArrayLine##[[:space]]##}%%[[:space]]##}"
-    mdArrayLine="${${${mdArrayLine##'('}%%,}%%')'}"
-    [[ "$mdArrayLine" != "null" ]] || assertionFailed "'null' is not expected here." ${(%):-%I}
+  local ii
+  for ii in {1..$numberOfMDArrayLines}; do
+    mdArrayLine="${${mdArrayLines[$ii]##[[:space:]]##}%%[[:space:]]##}"
     if [[ -z "$mdArrayLine" ]]; then
       continue
+    fi
+    if [[ $ii -eq 1 ]] && [[ "$mdArrayLine" == "(" ]]; then
+      continue
+    fi
+    if [[ $ii -eq $numberOfMDArrayLines ]] && [[ "$mdArrayLine" == ")" ]]; then
+      continue
+    fi
+    if [[ $ii -gt 1 ]]; then
+      mdArrayLine=${mdArrayLine%%,}
     fi
     printf '%s\n' "$(decodeMDString "$mdArrayLine")"
   done
@@ -238,21 +271,21 @@ function __fontutil-attributes-for-files() {
   local -r attributeName="$1"; shift
   local -r -a filePaths=($@)
 
-  function __printFamilyHelp() {
+  function __printAttributesForFilesHelp() {
     {
-      echo "${subcommands[$subcommandName]}"
+      echo "${subcommands[$subcommandName]:-${subcommands[$subcommandAliases[$subcommandName]]}}"
       echo "  Usage: $commandName $subcommandName FILE..."
     } 1>&2
   }
 
   if [[ -n "${parsedArguments[(i)--help]}" ]]; then
-    __printFamilyHelp
+    __printAttributesForFilesHelp
     return 0
   fi
 
   if [[ $#filePaths -lt 1 ]]; then
     printError "No file specified."
-    __printFamilyHelp
+    __printAttributesForFilesHelp
     return 1
   fi
 
@@ -267,6 +300,14 @@ function __fontutil-attributes-for-files() {
       printItemsForAttributeAtPath "$attributeName" "$fontFilePath"
     fi
   done
+}
+
+function fontutil-authors() {
+  __fontutil-attributes-for-files kMDItemAuthors $@
+}
+
+function fontutil-copyright() {
+  __fontutil-attributes-for-files kMDItemCopyright $@
 }
 
 function fontutil-family() {
@@ -289,8 +330,16 @@ function fontutil-postscript-name() {
   __fontutil-attributes-for-files com_apple_ats_name_postscript $@
 }
 
+function fontutil-publishers() {
+  __fontutil-attributes-for-files kMDItemPublishers $@
+}
+
 function fontutil-style-name() {
   __fontutil-attributes-for-files com_apple_ats_name_style $@
+}
+
+function fontutil-version() {
+  __fontutil-attributes-for-files kMDItemVersion $@
 }
 
 ##### MAIN #####
@@ -315,6 +364,8 @@ function _main_() {
   local -r -a subcommandArguments=($@)
   if [[ -n "$subcommands[(I)$subcommandName]" ]]; then
     "fontutil-$subcommandName" $subcommandArguments
+  elif [[ -n "$subcommandAliases[(I)$subcommandName]" ]]; then
+    "fontutil-${subcommandAliases[$subcommandName]}" $subcommandArguments
   else
     printError "Unknown subcommand: $subcommandName"
     printHelp
