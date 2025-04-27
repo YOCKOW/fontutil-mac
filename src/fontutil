@@ -10,7 +10,8 @@ set -euo pipefail
 local -r commandName="$0"
 local -r -A subcommands=(
   [--help]="View help message."
-  [family]="View the family name(s) of the font(s)."
+  [family]="Alias of 'family-name'"
+  [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
 )
 local -r -a supportedContentTypes=(
@@ -267,6 +268,10 @@ function __fontutil-attributes-for-files() {
 
 function fontutil-family() {
   __fontutil-attributes-for-files com_apple_ats_name_family $@
+}
+
+function fontutil-family-name() {
+  fontutil-family $@
 }
 
 function fontutil-fond-name() {
