@@ -1,0 +1,18 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-uuid
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+set -o extendedglob
+
+local fontFile
+for fontFile in "$FONTUTIL_TEST_FONTS_DIR"/**/*.{o,t}tf(N); do
+  local generatedUUID=$("$FONTUTIL_COMMAND" uuid "$fontFile")
+  SSTAssertStringEqual "${generatedUUID[15]}" "8" "Unexpected UUID?!: $generatedUUID generated from $fontFile"
+  SSTAssertStringMatch "${generatedUUID[20]}" "(8|9|A|B)" "Unexpected UUID?!: $generatedUUID generated from $fontFile"
+done

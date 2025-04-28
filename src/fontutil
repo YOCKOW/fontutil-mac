@@ -21,6 +21,7 @@ local -r -A subcommands=(
   [postscript-name]="View the PostScript name of the font."
   [publishers]="View the publishers of the font."
   [style-name]="View the style name of the font."
+  [uuid]="View the UUID for the font file. (Internal Use)"
   [version]="View the version of the font."
 )
 local -r -A subcommandAliases=(
@@ -373,6 +374,34 @@ function fontutil-publishers() {
 
 function fontutil-style-name() {
   __fontutil-attributes-for-files com_apple_ats_name_style $@
+}
+
+function fontutil-uuid() {
+  function __hash-to-uuid() {
+    local -r hashValue="${1-}"
+    verbosePrint "Hash Value: $hashValue"
+    if [[ "$hashValue" =~ ^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12}) ]]; then
+      local generatedUUID="${match[1]}-${match[2]}-${match[3]}-${match[4]}-${match[5]}"
+      generatedUUID[15]="8"
+
+      case ${generatedUUID[20]} in
+      0 | 4 | 8 | c) generatedUUID[20]="8";;
+      1 | 5 | 9 | d) generatedUUID[20]="9";;
+      2 | 6 | a | e) generatedUUID[20]="a";;
+      3 | 7 | b | f) generatedUUID[20]="b";;
+      *) assertionFailed "Unexpected character in UUID: ${generatedUUID[20]}" ${(%):-%I}
+      esac
+
+      echo ${(U)generatedUUID}
+    else
+      assertionFailed "Invalid hash value: $hashValue" ${(%):-%I}
+    fi
+  }
+
+  local -r hashValue="$(fontutil-hash $@)"
+  if [[ -n "$hashValue" ]]; then # It's empty if no file is specified.
+    __hash-to-uuid "$hashValue"
+  fi
 }
 
 function fontutil-version() {
