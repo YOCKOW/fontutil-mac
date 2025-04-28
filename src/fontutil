@@ -236,24 +236,23 @@ function printItemsForAttributeAtPath() {
   [[ -f "$filePath" ]] && isSupportedFile "$filePath" \
     || assertionFailed "printItemsForAttributeAtPath() requires a valid file path." ${(%):-%I}
 
-  function __getFontAttributeItemsString() {
-    local -r cacheKey="${filePath}:${attributeName}"
+  local -r cacheKey="${filePath}:${attributeName}"
+  function __storeCache_fontAttributeItemsString() {
     if [[ -n "${__cache_printItemsForAttributeAtPath[(i)$cacheKey]}" ]]; then
-      echo "${__cache_printItemsForAttributeAtPath[$cacheKey]}"
+      verbosePrint "Cache of attributes hit for $cacheKey"
       return 0
     fi
 
     local -r parsedItems=$(decodedMDArrayForNameAtPath "$attributeName" "$filePath")
     __cache_printItemsForAttributeAtPath[$cacheKey]="$parsedItems"
-    echo "$parsedItems"
   }
 
   if isTrue $withFilename; then
     echo "${filePath}:"
   fi
-  local -r fontAttributeString=$(__getFontAttributeItemsString)
-  local fontAttributeItem  
-  for fontAttributeItem in ${(f)fontAttributeString}; do
+  __storeCache_fontAttributeItemsString "$cacheKey"
+  local fontAttributeItem
+  for fontAttributeItem in ${(f)__cache_printItemsForAttributeAtPath[$cacheKey]}; do
     if isTrue $withFilename; then
       printf '  %s\n' "$fontAttributeItem"
     else
@@ -334,14 +333,22 @@ function fontutil-full-name() {
   __fontutil-attributes-for-files com_apple_ats_name_full $@
 }
 
+typeset -g -A __cache_fontutil_hash=()
 function fontutil-hash() {
-  function __hashOfFile() {
-    [[ $#@ -eq 1 ]] || assertionFailed "__hashOfFile() requires exactly one file path." ${(%):-%I}
+  # Global variables aren't shared with subprocess, so...
+  function __storeCache_hashOfFile() {
+    [[ $#@ -eq 1 ]] || assertionFailed "__storeCache_hashOfFile() requires exactly one file path." ${(%):-%I}
     local -r filePath="$1"
+
+    if [[ -n "${__cache_fontutil_hash[(I)$filePath]}" ]]; then
+      verbosePrint "Cache of hash value hit for $filePath"
+      return 0
+    fi
+
     [[ -f "$filePath" ]] || assertionFailed "File not found at ${filePath}." ${(%):-%I}
     local -r hashed=${(L)$(shasum -a 256 -b "$filePath")[(w)1]}
     [[ "$hashed" =~ ^[0-9a-f]{64}$ ]] || assertionFailed "Unexpected hash value." ${(%):-%I}
-    echo $hashed
+    __cache_fontutil_hash[$filePath]="$hashed"
   }
 
   local -r -a filePaths=($@)
@@ -355,18 +362,21 @@ function fontutil-hash() {
     printError "No supported files."
     return 1
   elif [[ $#fontFiles -eq 1 ]]; then
-    __hashOfFile $fontFiles
+    __storeCache_hashOfFile ${fontFiles[1]}
+    echo "${__cache_fontutil_hash[${fontFiles[1]}]}"
   else
     local -a hashValues=()
     local fontFile
     for fontFile in $fontFiles; do
-      hashValues=($hashValues $(__hashOfFile "$fontFile"))
+      __storeCache_hashOfFile "$fontFile"
+      hashValues=($hashValues "${__cache_fontutil_hash[$fontFile]}")
     done
     hashValues=(${(o)hashValues})
     
     local -r tmpFile="$(mktemp)"
     echo ${(j::)hashValues} | xxd -r -p >"$tmpFile"
-    __hashOfFile "$tmpFile"
+    __storeCache_hashOfFile "$tmpFile"
+    echo "${__cache_fontutil_hash[$tmpFile]}"
   fi
 }
 
