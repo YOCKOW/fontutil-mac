@@ -8,11 +8,13 @@
 set -euo pipefail
 set -o extendedglob
 
+local -r fontutilCaveat="EVERY FONT MAY BE SUBJECT TO ITS LICENSE, COPYRIGHT, PATENT, OR ANY RIGHTS ITS AUTHORS HOLD. THE ORIGINAL TOOL AUTHOR, YOCKOW, NEVER BEAR ANY RESPONSIBILITY FOR ANY ISSUES CAUSED BY THE TOOL. SEE ALSO THE LICENSE OF THE TOOL (https://GitHub.com/YOCKOW/fontutil-mac/blob/main/LICENSE.txt)."
 
 local -r commandName="$0"
 local -r -A subcommands=(
   [--help]="View help message."
   [authors]="View the authors of the font."
+  [caveat]="View the caveat of this tool. (Internal Use)"
   [copyright]="View the copyright information of the font."
   [family-name]="View the family name(s) of the font(s)."
   [fond-name]="View the fond name of the font."
@@ -306,6 +308,10 @@ function __fontutil-attributes-for-files() {
 
 function fontutil-authors() {
   __fontutil-attributes-for-files kMDItemAuthors $@
+}
+
+function fontutil-caveat() {
+  echo "$fontutilCaveat"
 }
 
 function fontutil-copyright() {
