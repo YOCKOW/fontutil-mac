@@ -68,6 +68,12 @@ fontutil style-name MyFontFile.ttf
 fontutil version MyFontFile.ttf
 ```
 
+## Export font files to a 'mobileconfig' file.
+
+```console
+fontutil mobileconfig --name "My Font Collection" --output MyFontCollection.mobileconfig MyFontFile1.ttf MyFontFile2.ttf
+```
+
 
 # License
 
