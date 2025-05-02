@@ -1,0 +1,15 @@
+#!/bin/zsh
+
+################################################################################
+# fontutil-tests/test-mobileconfig
+#   © 2025 YOCKOW.
+#     Licensed under MIT License.
+#     See "LICENSE.txt" for more information.
+################################################################################
+
+set -eu
+
+local -r mobileconfig=$("$FONTUTIL_COMMAND" mobileconfig --name test "$FONTUTIL_TEST_FONTS_DIR/ttf/Mplus1-Regular.ttf")
+if ! [[ "$mobileconfig" =~ "JQAgAC8AMQAxADIANgAxADEAMQA0ADIAHQAyADQAZAAZAJ0AGQAZACsAnQCWAJYAHgAZABkAHAAm" ]]; then
+  SSTFail "Unexpected mobileconfig." -l ${(%):-%I}
+fi
