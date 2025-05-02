@@ -8,9 +8,10 @@
 set -euo pipefail
 set -o extendedglob
 
-local -r fontutilCaveat="EVERY FONT MAY BE SUBJECT TO ITS LICENSE, COPYRIGHT, PATENT, OR ANY RIGHTS ITS AUTHORS HOLD. THE ORIGINAL TOOL AUTHOR, YOCKOW, NEVER BEARS ANY RESPONSIBILITY FOR ANY ISSUES CAUSED BY THE TOOL. SEE ALSO THE LICENSE OF THE TOOL (https://GitHub.com/YOCKOW/fontutil-mac/blob/main/LICENSE.txt)."
+local -r fontutilCaveat="EVERY FONT MAY BE SUBJECT TO ITS LICENSE, COPYRIGHT, PATENT, OR ANY RIGHTS ITS AUTHORS HOLD. THE ORIGINAL TOOL AUTHOR, YOCKOW, NEVER BEARS ANY RESPONSIBILITY FOR ANY ISSUES CAUSED BY THE TOOL. SEE ALSO THE LICENSE OF THE TOOL: https://GitHub.com/YOCKOW/fontutil-mac/blob/main/LICENSE.txt "
 
 local -r commandName="$0"
+local subcommandName="<subcommand placeholder>"
 local -r -A subcommands=(
   [--help]="View help message."
   [authors]="View the authors of the font."
@@ -20,6 +21,7 @@ local -r -A subcommands=(
   [fond-name]="View the fond name of the font."
   [full-name]="View the full name of the font."
   [hash]="View the file hash for the font. (Internal Use)"
+  [mobileconfig]="Export font files to a '.mobileconfig' file."
   [postscript-name]="View the PostScript name of the font."
   [publishers]="View the publishers of the font."
   [style-name]="View the style name of the font."
@@ -28,6 +30,7 @@ local -r -A subcommands=(
 )
 local -r -A subcommandAliases=(
   [author]=authors
+  [export-mobileconfig]=mobileconfig
   [family]=family-name
   [publisher]=publishers
 )
@@ -74,7 +77,7 @@ function printHelp() {
     local -r -a subcommandAliasNames=(${(@k)subcommandAliases})
     local aliasName
     for aliasName in ${(o)subcommandAliasNames}; do
-      printf "%16s: %s\n" "$aliasName" "Alias of '${subcommandAliases[$aliasName]}'"
+      printf "%20s: %s\n" "$aliasName" "Alias of '${subcommandAliases[$aliasName]}'"
     done
   } 1>&2
 }
@@ -239,7 +242,7 @@ function printItemsForAttributeAtPath() {
   local -r cacheKey="${filePath}:${attributeName}"
   function __storeCache_fontAttributeItemsString() {
     if [[ -n "${__cache_printItemsForAttributeAtPath[(i)$cacheKey]}" ]]; then
-      verbosePrint "Cache of attributes hit for $cacheKey"
+      verbosePrint "Cache hit for $cacheKey"
       return 0
     fi
 
@@ -259,6 +262,11 @@ function printItemsForAttributeAtPath() {
       printf '%s\n' "$fontAttributeItem"
     fi
   done
+}
+
+function xmlEscape() {
+  local -r string="${1-}"
+  echo "${${${string//&/&amp;}//</&lt;}//>/&gt;}"
 }
 
 ##### SUBCOMMANDS #####
@@ -341,7 +349,7 @@ function fontutil-hash() {
     local -r filePath="$1"
 
     if [[ -n "${__cache_fontutil_hash[(I)$filePath]}" ]]; then
-      verbosePrint "Cache of hash value hit for $filePath"
+      verbosePrint "Cache hit for hash value of ${filePath}."
       return 0
     fi
 
@@ -380,6 +388,278 @@ function fontutil-hash() {
   fi
 }
 
+function fontutil-mobileconfig() {
+  function printMobileconfigHelp() {
+    {
+      echo "Usage: $commandName $subcommandName [--help] --name NAME [--description DESCRIPTION] [--organization ORGANIZATION] [--output OUTPUT] FILE..."
+      echo
+      echo "Options:"
+      echo "  --help: View this message."
+      echo "  --name NAME: The name of the configuration."
+      echo "  --description DESCRIPTION: The description of the configuration."
+      echo "  --organization ORGANIZATION: The publisher of the configuration."
+      echo "  --output OUTPUT: A file that configuration is written to. (Default: - (standard output))"
+      echo "  --force: Write configuration even if a file already exists."
+    } 1>&2
+  }
+
+  local -A parsedArguments=()
+  zparseopts -D -E -M -A parsedArguments -- \
+    -help \
+    n: -name:=n \
+    d: -description:=d \
+    -organization: \
+    o: -output:=o \
+    f -force=f \
+
+  if [[ -n "${parsedArguments[(i)--help]}" ]]; then
+    printMobileconfigHelp
+    return 0
+  fi
+
+  local -r -a filePaths=($@)
+  local -A confOptions=(
+    [name]=""
+    [description]=""
+    [organization]=""
+    [output]="-"
+    [force]="false"
+  )
+  local -A keyMap=(
+    [-n]="name"
+    [-d]="description"
+    [--organization]="organization"
+    [-o]="output"
+    [-f]="force"
+  )
+  local -a requiredOptions=(name)
+  local -a booleanOptions=(force)
+
+  local aKey
+  local aValue
+  for aKey aValue in ${(kv)keyMap}; do
+    if [[ -n "${parsedArguments[(i)$aKey]}" ]]; then
+      if (( $booleanOptions[(I)$aValue] )); then
+        confOptions[$aValue]="true"
+      else
+        confOptions[$aValue]="${parsedArguments[$aKey]##=}"
+      fi
+      verbosePrint "Option '$aValue' is set to \"${confOptions[$aValue]}\"."
+    fi
+    if (( $requiredOptions[(I)$aValue] )) && if [[ -z "${confOptions[$aValue]}" ]]; then
+      printError "Missing required option: ${aValue}."
+      printMobileconfigHelp
+      return 1
+    fi
+  done
+
+  local -r mustGenerateDescription=$({
+    if [[ -z "$confOptions[description]" ]]; then
+      echo true
+    else
+      echo false
+    fi
+  })
+
+  local -r mustGenerateOrganization=$({
+    if [[ -z "$confOptions[organization]" ]]; then
+      echo true
+    else
+      echo false
+    fi
+  })
+  local -a authorsAndOrginizations=()
+
+  local -r ouputIsStdout=$({
+    if [[ "$confOptions[output]" == "-" ]]; then
+      echo true
+    else 
+      echo false
+    fi
+  })
+  local overwrite="false"
+  local tmpOut=""
+  if isTrue $ouputIsStdout; then;
+    verbosePrint "Configuration is written to standard output."
+  else
+    if ! [[ "${(L)confOptions[output]}" =~ \.mobileconfig$ ]]; then
+      confOptions[output]="${confOptions[output]}.mobileconfig"
+    fi
+
+    if [[ -d "$confOptions[output]" ]]; then
+      printError "Can't write configuration to directory."
+      return 1
+    fi
+    if [[ -f "$confOptions[output]" ]]; then
+      if ! isTrue $confOptions[force]; then
+        printError "File already exists at ${confOptions[output]}."
+        return 1
+      elif [[ ! -w "$confOptions[output]" ]]; then
+        printError "File is not writable at ${confOptions[output]}."
+        return 1
+      else
+        overwrite="true"
+        tmpOut=$(mktemp)
+        verbosePrint "Configuration will be overwritten to ${confOptions[output]}."
+        verbosePrint "(Temporarily written to $tmpOut)"
+      fi
+    fi
+  fi
+
+  local -a supportedFilePaths=()
+  allFiles --validate $filePaths | while read -r aFile; do
+    supportedFilePaths=($supportedFilePaths $aFile)
+  done
+  if [[ $#supportedFilePaths -lt 1 ]]; then
+    printError "No supported files specified."
+    printMobileconfigHelp
+    return 1
+  else
+    verbosePrint "Processing ${#supportedFilePaths} supported files..."
+    if isTrue $mustGenerateDescription; then
+      confOptions[description]="This configuration contains ${#supportedFilePaths}"
+      if [[ $#supportedFilePaths -eq 1 ]]; then
+        confOptions[description]+=" font."
+      else
+        confOptions[description]+=" fonts."
+      fi
+    fi
+  fi
+
+  function __writeConf() {
+    local -r confLine="${1-}"
+    if isTrue $ouputIsStdout; then
+      echo "$confLine"
+    elif isTrue $overwrite; then
+      echo "$confLine" >>"$tmpOut"
+    else
+      echo "$confLine" >>"${confOptions[output]}"
+    fi
+  }
+
+  function __writeFont() {
+    local -r fontFilePath="${1-}"
+    isSupportedFile "$fontFilePath" || assertionFailed "Unsupported file?!" ${(%):-%I}
+
+    function __fontName() {
+      local -r -a priority=(full-name fond-name postscript-name family-name)
+      local pr
+      for pr in $priority; do
+        local -r -a maybeName=(${(ps:\n:)$("fontutil-$pr" "$fontFilePath")})
+        if [[ $#maybeName -gt 0 ]] && [[ -n "${maybeName[1]}" ]]; then
+          echo "${maybeName[1]}"
+          return 0
+        fi
+      done
+      echo $(basename "$fontFilePath")
+    }
+    local -r fontName=$(__fontName)
+    local -r fontUUID=$(fontutil-uuid "$fontFilePath")
+    local -r fontCopyright=$(fontutil-copyright "$fontFilePath")
+    local -r fontDescription=$(
+      if [[ -n "$fontCopyright" ]]; then
+        echo "Configures \"$fontName\" font settings. $fontCopyright"
+      else
+        echo "Configures \"$fontName\" font settings."
+      fi
+    )
+    
+    __writeConf '      <dict>'
+    __writeConf '        <key>Font</key>'
+    __writeConf '        <data>'
+
+    base64 -b 76 -i "$fontFilePath" | while read -r base64Line; do
+      __writeConf "          $base64Line"
+    done
+
+    __writeConf '        </data>'
+    __writeConf '        <key>Name</key>'
+    __writeConf "        <string>$(xmlEscape "$fontName")</string>"
+    __writeConf '        <key>PayloadDescription</key>'
+    __writeConf "        <string>$(xmlEscape "$fontDescription")</string>"
+    __writeConf '        <key>PayloadDisplayName</key>'
+    __writeConf '        <string>Font</string>'
+    __writeConf "        <key>PayloadIdentifier</key>"
+    __writeConf "        <string>com.apple.font.${fontUUID}</string>"
+    __writeConf '        <key>PayloadType</key>'
+    __writeConf '        <string>com.apple.font</string>'
+    __writeConf '        <key>PayloadUUID</key>'
+    __writeConf "        <string>${fontUUID}</string>"
+    __writeConf '        <key>PayloadVersion</key>'
+    __writeConf '        <integer>1</integer>'
+    __writeConf '      </dict>'
+
+    if isTrue $mustGenerateOrganization; then
+      local anAuthor
+      fontutil-authors "$fontFilePath" | while read -r anAuthor; do
+        verbosePrint "Author: $anAuthor"
+        if [[ $authorsAndOrginizations[(I)$anAuthor] -lt 1 ]]; then
+          authorsAndOrginizations+=($anAuthor)
+        fi
+      done
+
+      local aPublisher
+      fontutil-publishers "$fontFilePath"  | while read -r aPublisher; do
+        verbosePrint "Publisher: $aPublisher"
+        if [[ $authorsAndOrginizations[(I)$aPublisher] -lt 1 ]]; then
+          authorsAndOrginizations+=($aPublisher)
+        fi
+      done
+    fi
+  }
+
+  # Property List
+  __writeConf '<?xml version="1.0" encoding="UTF-8"?>'
+  __writeConf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+  __writeConf '<plist version="1.0">'
+  __writeConf '  <dict>'
+
+  ## Begin Font Payloads
+	__writeConf '    <key>PayloadContent</key>'
+	__writeConf '    <array>'
+  
+  local fontFilePath
+  for fontFilePath in $supportedFilePaths; do
+    __writeFont "$fontFilePath"
+  done
+
+  ## End Font Payloads
+  __writeConf '    </array>'
+
+  ## Begin Property List Info
+  local -r payloadUUID=$(fontutil-uuid $supportedFilePaths)
+  confOptions[description]+=" (This file is generated by fontutil-mac; https://github.com/YOCKOW/fontutil-mac; $fontutilCaveat)"
+  if isTrue $mustGenerateOrganization; then
+    verbosePrint "Set organization to the authors and publishers of given font(s)."
+    confOptions[organization]="${(j:, :)authorsAndOrginizations}"
+  fi
+  __writeConf '    <key>PayloadDescription</key>'
+	__writeConf "    <string>$(xmlEscape "${confOptions[description]}")</string>"
+	__writeConf '    <key>PayloadDisplayName</key>'
+	__writeConf "    <string>$(xmlEscape "$confOptions[name]")</string>"
+	__writeConf '    <key>PayloadIdentifier</key>'
+	__writeConf "    <string>jp.YOCKOW.fontutil.${payloadUUID}</string>"
+  __writeConf '    <key>PayloadOrganization</key>'
+	__writeConf "    <string>$(xmlEscape "$confOptions[organization]")</string>"
+	__writeConf '    <key>PayloadRemovalDisallowed</key>'
+	__writeConf '    <false/>'
+	__writeConf '    <key>PayloadType</key>'
+	__writeConf '    <string>Configuration</string>'
+	__writeConf '    <key>PayloadUUID</key>'
+	__writeConf "    <string>${payloadUUID}</string>"
+	__writeConf '    <key>PayloadVersion</key>'
+	__writeConf '    <integer>1</integer>'
+
+  ## End Propery List
+  __writeConf '  </dict>'
+  __writeConf '</plist>'
+
+  if isTrue $overwrite; then
+    verbosePrint "Copying mobileconfig file from $tmpOut to ${confOptions[output]}..."
+    cp -f "$tmpOut" "$confOptions[output]"
+  fi
+}
+
 function fontutil-postscript-name() {
   __fontutil-attributes-for-files com_apple_ats_name_postscript $@
 }
@@ -414,7 +694,8 @@ function fontutil-uuid() {
     fi
   }
 
-  local -r hashValue="$(fontutil-hash $@)"
+  local hashValue=""
+  fontutil-hash $@ | read hashValue
   if [[ -n "$hashValue" ]]; then # It's empty if no file is specified.
     __hash-to-uuid "$hashValue"
   fi
@@ -433,7 +714,7 @@ function _main_() {
     exit 1
   fi
 
-  local -r subcommandName="$1"
+  subcommandName="$1"
   shift
 
   local -A commonParsedArguments=()
